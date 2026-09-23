@@ -386,27 +386,32 @@
   }, { passive: false });
 
   // Safari / Mac 触控板双指捏合（gesture 事件，带 scale 属性）
-  var gestureStartScale = 1, gestureStartZoom = 1;
-  viewport.addEventListener('gesturestart', function (e) {
-    e.preventDefault();
-    gestureStartScale = e.scale;
-    gestureStartZoom = scale;
-  });
-  viewport.addEventListener('gesturechange', function (e) {
-    e.preventDefault();
-    var r = viewport.getBoundingClientRect();
-    var mx = e.clientX - r.left;
-    var my = e.clientY - r.top;
-    var ns = clamp(gestureStartZoom * (e.scale / gestureStartScale), MIN, MAX);
-    var f = ns / scale;
-    tx = mx - (mx - tx) * f;
-    ty = my - (my - ty) * f;
-    scale = ns;
-    apply();
-  });
-  viewport.addEventListener('gestureend', function (e) {
-    e.preventDefault();
-  });
+  // 仅在非触屏设备启用：iOS/Android 触屏上 gesture 事件会与 touch 事件双重触发，
+  // 导致缩放"一下子放很大"，因此触屏设备统一只走 touch 事件。
+  var isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if (!isTouchDevice) {
+    var gestureStartScale = 1, gestureStartZoom = 1;
+    viewport.addEventListener('gesturestart', function (e) {
+      e.preventDefault();
+      gestureStartScale = e.scale;
+      gestureStartZoom = scale;
+    });
+    viewport.addEventListener('gesturechange', function (e) {
+      e.preventDefault();
+      var r = viewport.getBoundingClientRect();
+      var mx = e.clientX - r.left;
+      var my = e.clientY - r.top;
+      var ns = clamp(gestureStartZoom * (e.scale / gestureStartScale), MIN, MAX);
+      var f = ns / scale;
+      tx = mx - (mx - tx) * f;
+      ty = my - (my - ty) * f;
+      scale = ns;
+      apply();
+    });
+    viewport.addEventListener('gestureend', function (e) {
+      e.preventDefault();
+    });
+  }
 
   // 拖拽平移
   var dragging = false, sx = 0, sy = 0, stx = 0, sty = 0;
@@ -493,8 +498,9 @@
       var mx = cx - r.left;
       var my = cy - r.top;
       if (touchState.mode === 'pinch') {
-        // 以两指中心为锚点缩放
-        var ns = clamp(touchState.scale * (d / touchState.dist), MIN, MAX);
+        // 以两指中心为锚点缩放，加 0.85 阻尼让缩放更柔和、不"一下子放很大"
+        var ratio = d / touchState.dist;
+        var ns = clamp(touchState.scale * (1 + (ratio - 1) * 0.85), MIN, MAX);
         var f = ns / scale;
         tx = mx - (mx - tx) * f;
         ty = my - (my - ty) * f;
